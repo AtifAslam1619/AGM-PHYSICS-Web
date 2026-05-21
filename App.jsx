@@ -449,4 +449,745 @@ where correct is the 0-based index of the correct option. If you cannot determin
     reader.readAsDataURL(file);
   };
 
-  const updateQuestion = (idx, field, val) 
+  const updateQuestion = (idx, field, val) => {
+    setQuestions(prev => prev.map((q, i) => i === idx ? { ...q, [field]: val } : q));
+  };
+  const updateOption = (qIdx, oIdx, val) => {
+    setQuestions(prev => prev.map((q, i) => {
+      if (i !== qIdx) return q;
+      const opts = [...q.options]; opts[oIdx] = val;
+      return { ...q, options: opts };
+    }));
+  };
+  const addBlankQ = () => setQuestions(prev => [...prev, { id: randomId(), text: "", options: ["", "", "", ""], correct: 0 }]);
+  const removeQ = (idx) => setQuestions(prev => prev.filter((_, i) => i !== idx));
+
+  const publish = () => {
+    const exam = {
+      id: randomId(), ...settings, questions,
+      createdAt: Date.now(), status: "active"
+    };
+    setExams(prev => [exam, ...prev]);
+    setCreatedExam(exam);
+    setStep(3);
+  };
+
+  if (step === 3) return (
+    <div className="page">
+      <div className="card" style={{ textAlign: "center", padding: 40 }}>
+        <div style={{ fontSize: "3rem", marginBottom: 12 }}>🎉</div>
+        <div style={{ fontFamily: "Bebas Neue", fontSize: "2rem", color: "var(--accent3)", letterSpacing: 2 }}>TEST PUBLISHED!</div>
+        <p style={{ color: "var(--muted)", margin: "12px 0 24px" }}>
+          "{createdExam.title}" is now live for {createdExam.class} students.
+        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button className="btn btn-primary" onClick={() => { setStep(1); setSettings({ title: "", class: "Class 11", duration: 30, perQMarks: 4, negativeMarking: false, negativePenalty: 1 }); setQuestions([]); setImagePreview(null); }}>
+            + Create Another
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="page">
+      <div className="section-header">
+        <div className="section-title">CREATE MCQ TEST</div>
+        <div className="section-sub">Upload question images — AI extracts questions automatically</div>
+      </div>
+
+      {/* STEP INDICATOR */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 28 }}>
+        {[1, 2].map(s => (
+          <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+              background: step >= s ? "var(--accent)" : "var(--surface2)",
+              color: step >= s ? "#000" : "var(--muted)", fontSize: ".8rem", fontWeight: 700
+            }}>{s}</div>
+            <span style={{ fontSize: ".82rem", color: step === s ? "var(--text)" : "var(--muted)" }}>
+              {s === 1 ? "Test Settings" : "Questions"}
+            </span>
+            {s < 2 && <span style={{ color: "var(--border)", margin: "0 4px" }}>›</span>}
+          </div>
+        ))}
+      </div>
+
+      {step === 1 && (
+        <div className="card" style={{ maxWidth: 620 }}>
+          <div className="form-group">
+            <label className="form-label">Test Title</label>
+            <input className="form-input" placeholder="e.g. Electrostatics – Unit Test 1" value={settings.title}
+              onChange={e => setSettings(p => ({ ...p, title: e.target.value }))} />
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">For Class</label>
+              <select className="form-select" value={settings.class} onChange={e => setSettings(p => ({ ...p, class: e.target.value }))}>
+                {["Class 9", "Class 10", "Class 11", "Class 12", "JEE Mains", "NEET", "All Classes"].map(c =>
+                  <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Duration (minutes)</label>
+              <input className="form-input" type="number" min={5} max={180} value={settings.duration}
+                onChange={e => setSettings(p => ({ ...p, duration: +e.target.value }))} />
+            </div>
+          </div>
+          <div className="form-row-3">
+            <div className="form-group">
+              <label className="form-label">Marks / Question</label>
+              <input className="form-input" type="number" min={1} value={settings.perQMarks}
+                onChange={e => setSettings(p => ({ ...p, perQMarks: +e.target.value }))} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Negative Marking</label>
+              <select className="form-select" value={settings.negativeMarking ? "yes" : "no"}
+                onChange={e => setSettings(p => ({ ...p, negativeMarking: e.target.value === "yes" }))}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Marks Deducted</label>
+              <input className="form-input" type="number" min={0} step={0.25}
+                value={settings.negativePenalty} disabled={!settings.negativeMarking}
+                onChange={e => setSettings(p => ({ ...p, negativePenalty: +e.target.value }))} />
+            </div>
+          </div>
+          <div className="alert alert-info" style={{ marginTop: 4 }}>
+            Full Marks = {settings.perQMarks} per question | {settings.negativeMarking ? `-${settings.negativePenalty} for wrong` : "No negative marking"}
+          </div>
+          <button className="btn btn-primary" disabled={!settings.title} onClick={() => setStep(2)}>
+            Next: Add Questions →
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+          {/* Left: Upload & AI */}
+          <div>
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 12, fontSize: ".9rem" }}>📸 Upload Question Image</div>
+              <div className="upload-box" onClick={() => fileRef.current.click()}>
+                {imagePreview
+                  ? <img src={imagePreview} alt="uploaded" style={{ width: "100%", borderRadius: 8, maxHeight: 220, objectFit: "contain" }} />
+                  : <>
+                    <div className="upload-icon">📄</div>
+                    <div className="upload-text">Click to upload image of question paper<br /><small>AI will extract MCQs automatically</small></div>
+                  </>}
+                <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageUpload} />
+              </div>
+              {aiLoading && <div className="ai-loading" style={{ marginTop: 12 }}><div className="spinner" />AI is reading your question paper…</div>}
+              {!aiLoading && questions.length > 0 && (
+                <div className="alert alert-success" style={{ marginTop: 10 }}>✓ {questions.length} question(s) loaded</div>
+              )}
+            </div>
+            <button className="btn btn-secondary" style={{ width: "100%" }} onClick={addBlankQ}>+ Add Question Manually</button>
+          </div>
+
+          {/* Right: Questions */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontWeight: 600 }}>{questions.length} Question(s)</span>
+              {questions.length > 0 && (
+                <button className="btn btn-primary btn-sm" onClick={publish}>Publish Test 🚀</button>
+              )}
+            </div>
+            <div style={{ maxHeight: 520, overflowY: "auto", paddingRight: 4 }}>
+              {questions.map((q, qi) => (
+                <div key={q.id} className="card" style={{ marginBottom: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontFamily: "JetBrains Mono", fontSize: ".75rem", color: "var(--accent)" }}>Q{qi + 1}</span>
+                    <button className="btn btn-danger btn-sm" onClick={() => removeQ(qi)}>✕</button>
+                  </div>
+                  <textarea className="form-textarea" style={{ marginBottom: 8, minHeight: 56, fontSize: ".85rem" }}
+                    placeholder="Question text…" value={q.text}
+                    onChange={e => updateQuestion(qi, "text", e.target.value)} />
+                  {q.options.map((opt, oi) => (
+                    <div key={oi} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 5 }}>
+                      <input type="radio" name={`correct-${qi}`} checked={q.correct === oi} onChange={() => updateQuestion(qi, "correct", oi)} />
+                      <input className="form-input" style={{ padding: "6px 10px", fontSize: ".82rem" }}
+                        placeholder={`Option ${String.fromCharCode(65 + oi)}`} value={opt}
+                        onChange={e => updateOption(qi, oi, e.target.value)} />
+                    </div>
+                  ))}
+                  <div style={{ fontSize: ".72rem", color: "var(--accent3)", marginTop: 4 }}>
+                    ● Correct: Option {String.fromCharCode(65 + q.correct)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Student: Exam Board ─────────────────────────────────────────────────────
+function ExamBoard({ exams, student, onStartExam }) {
+  const active = exams.filter(e => e.status === "active");
+  return (
+    <div className="page">
+      <div className="section-header">
+        <div className="section-title">ACTIVE TESTS</div>
+        <div className="section-sub">Hello {student.name} ({student.class}) — Click a test to begin</div>
+      </div>
+      {active.length === 0 && (
+        <div className="card" style={{ textAlign: "center", padding: 48 }}>
+          <div style={{ fontSize: "3rem", marginBottom: 12 }}>📭</div>
+          <div style={{ color: "var(--muted)" }}>No active tests right now. Check back soon!</div>
+        </div>
+      )}
+      <div className="grid2">
+        {active.map(exam => {
+          const total = exam.questions.length * exam.perQMarks;
+          return (
+            <div key={exam.id} className="card exam-card" onClick={() => onStartExam(exam)}>
+              <div style={{ display: "flex", justify: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+                <div className="exam-card-title">{exam.title}</div>
+                <span className="tag tag-green">LIVE</span>
+              </div>
+              <div className="exam-meta">
+                <span>🎓 {exam.class}</span>
+                <span>⏱ {exam.duration} min</span>
+                <span>❓ {exam.questions.length} Qs</span>
+                <span>📊 {total} marks</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {exam.negativeMarking && <span className="tag tag-red">−{exam.negativePenalty} Negative</span>}
+                <span className="tag tag-yellow">+{exam.perQMarks} per Q</span>
+              </div>
+              <button className="btn btn-primary" style={{ marginTop: 16, width: "100%" }}>
+                Start Test →
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Student: Take Exam ──────────────────────────────────────────────────────
+function TakeExam({ exam, student, onComplete }) {
+  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [timeLeft, setTimeLeft] = useState(exam.duration * 60);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (submitted) return;
+    const t = setInterval(() => setTimeLeft(p => { if (p <= 1) { clearInterval(t); handleSubmit(); return 0; } return p - 1; }), 1000);
+    return () => clearInterval(t);
+  }, [submitted]);
+
+  const handleSubmit = useCallback(() => {
+    if (submitted) return;
+    setSubmitted(true);
+    // compute score
+    let correct = 0, wrong = 0, skipped = 0;
+    exam.questions.forEach(q => {
+      const a = answers[q.id];
+      if (a === undefined) skipped++;
+      else if (a === q.correct) correct++;
+      else wrong++;
+    });
+    const score = correct * exam.perQMarks - (exam.negativeMarking ? wrong * exam.negativePenalty : 0);
+    const total = exam.questions.length * exam.perQMarks;
+    onComplete({ score, correct, wrong, skipped, total, answers, exam, student });
+  }, [answers, submitted]);
+
+  const q = exam.questions[current];
+  const answered = Object.keys(answers).length;
+  const timerDanger = timeLeft <= 60;
+
+  return (
+    <div className="page">
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: "Bebas Neue", fontSize: "1.4rem", letterSpacing: 2 }}>{exam.title}</div>
+          <div style={{ fontSize: ".8rem", color: "var(--muted)" }}>{exam.class} • {exam.questions.length} Questions • {exam.perQMarks} marks each</div>
+        </div>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          <div className={`timer-ring ${timerDanger ? "timer-danger" : ""}`}>{formatTime(timeLeft)}</div>
+          <button className="btn btn-danger btn-sm" onClick={handleSubmit}>Submit</button>
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: ".75rem", color: "var(--muted)", marginBottom: 6 }}>
+          <span>Answered {answered}/{exam.questions.length}</span>
+          <span>Q{current + 1} of {exam.questions.length}</span>
+        </div>
+        <div className="progress-bar">
+          <div className="progress-fill" style={{ width: `${(answered / exam.questions.length) * 100}%` }} />
+        </div>
+      </div>
+
+      {/* Q Nav */}
+      <div className="q-nav">
+        {exam.questions.map((q, i) => (
+          <button key={q.id}
+            className={`q-nav-btn ${answers[q.id] !== undefined ? "answered" : ""} ${i === current ? "current" : ""}`}
+            onClick={() => setCurrent(i)}>
+            {i + 1}
+          </button>
+        ))}
+      </div>
+
+      {/* Question */}
+      <div className="card">
+        <div style={{ display: "flex", gap: 12, marginBottom: 16, alignItems: "flex-start" }}>
+          <span style={{ fontFamily: "JetBrains Mono", color: "var(--accent)", fontWeight: 700, fontSize: ".9rem", whiteSpace: "nowrap" }}>Q{current + 1}.</span>
+          <div style={{ fontSize: "1rem", lineHeight: 1.6 }}>{q.text || <span style={{ color: "var(--muted)" }}>[No question text]</span>}</div>
+        </div>
+        {q.options.map((opt, oi) => (
+          <div key={oi}
+            className={`mcq-option ${answers[q.id] === oi ? "selected" : ""}`}
+            onClick={() => setAnswers(p => ({ ...p, [q.id]: oi }))}>
+            <div className="mcq-letter">{String.fromCharCode(65 + oi)}</div>
+            <span>{opt || `Option ${String.fromCharCode(65 + oi)}`}</span>
+          </div>
+        ))}
+        {exam.negativeMarking && <div style={{ fontSize: ".75rem", color: "var(--muted)", marginTop: 10 }}>⚠ Negative marking: −{exam.negativePenalty} for wrong answer</div>}
+      </div>
+
+      {/* Nav */}
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
+        <button className="btn btn-secondary" disabled={current === 0} onClick={() => setCurrent(p => p - 1)}>← Prev</button>
+        {current < exam.questions.length - 1
+          ? <button className="btn btn-primary" onClick={() => setCurrent(p => p + 1)}>Next →</button>
+          : <button className="btn btn-green" onClick={handleSubmit}>Submit Test ✓</button>}
+      </div>
+    </div>
+  );
+}
+
+// ─── Analysis ────────────────────────────────────────────────────────────────
+function Analysis({ result, onBack }) {
+  const { score, correct, wrong, skipped, total, answers, exam, student } = result;
+  const pct = Math.max(0, Math.round((score / total) * 100));
+
+  const grade = pct >= 90 ? "A+" : pct >= 75 ? "A" : pct >= 60 ? "B" : pct >= 45 ? "C" : "D";
+  const gradeColor = pct >= 75 ? "var(--accent3)" : pct >= 45 ? "var(--accent)" : "var(--danger)";
+
+  const shareOnWhatsapp = () => {
+    const msg = `📊 *AGM Physics – Test Result*\n\n👤 Name: ${student.name}\n🎓 Class: ${student.class}\n📝 Test: ${exam.title}\n\n✅ Correct: ${correct}\n❌ Wrong: ${wrong}\n⭕ Skipped: ${skipped}\n\n🏆 Score: ${score}/${total} (${pct}%)\n🎯 Grade: ${grade}\n\n_Sent from AGM Physics Portal_`;
+    window.open(`https://wa.me/${TEACHER_WHATSAPP}?text=${encodeURIComponent(msg)}`, "_blank");
+  };
+
+  return (
+    <div className="page">
+      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+        {/* Score Header */}
+        <div className="card" style={{ textAlign: "center", marginBottom: 20, padding: 36 }}>
+          <div style={{ fontSize: ".8rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Your Score</div>
+          <div className="analysis-score-big">{score}<span style={{ fontSize: "2.5rem", opacity: .5 }}>/{total}</span></div>
+          <div style={{ fontSize: "3rem", fontFamily: "Bebas Neue", color: gradeColor, letterSpacing: 3, marginTop: 4 }}>Grade {grade}</div>
+          <div className="progress-bar" style={{ height: 10, margin: "16px 0" }}>
+            <div className="progress-fill" style={{ width: `${pct}%`, background: gradeColor }} />
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: ".88rem" }}>{pct}% | {exam.title}</div>
+        </div>
+
+        {/* Stats */}
+        <div className="analysis-grid" style={{ marginBottom: 20 }}>
+          <div className="analysis-stat">
+            <div className="analysis-stat-num" style={{ color: "var(--accent3)" }}>{correct}</div>
+            <div className="analysis-stat-label">Correct</div>
+          </div>
+          <div className="analysis-stat">
+            <div className="analysis-stat-num" style={{ color: "var(--danger)" }}>{wrong}</div>
+            <div className="analysis-stat-label">Wrong</div>
+          </div>
+          <div className="analysis-stat">
+            <div className="analysis-stat-num" style={{ color: "var(--muted)" }}>{skipped}</div>
+            <div className="analysis-stat-label">Skipped</div>
+          </div>
+          <div className="analysis-stat">
+            <div className="analysis-stat-num" style={{ color: "var(--accent)" }}>+{correct * exam.perQMarks}</div>
+            <div className="analysis-stat-label">Marks Earned</div>
+          </div>
+          {exam.negativeMarking && (
+            <div className="analysis-stat">
+              <div className="analysis-stat-num" style={{ color: "var(--danger)" }}>−{wrong * exam.negativePenalty}</div>
+              <div className="analysis-stat-label">Deducted</div>
+            </div>
+          )}
+          <div className="analysis-stat">
+            <div className="analysis-stat-num" style={{ color: "var(--accent2)" }}>{exam.questions.length}</div>
+            <div className="analysis-stat-label">Total Qs</div>
+          </div>
+        </div>
+
+        {/* Question Review */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ fontFamily: "Bebas Neue", fontSize: "1.2rem", letterSpacing: 2, marginBottom: 16 }}>DETAILED REVIEW</div>
+          {exam.questions.map((q, qi) => {
+            const selected = answers[q.id];
+            const isCorrect = selected === q.correct;
+            const isSkipped = selected === undefined;
+            return (
+              <div key={q.id} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: qi < exam.questions.length - 1 ? "1px solid var(--border)" : "none" }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "flex-start" }}>
+                  <span style={{ fontFamily: "JetBrains Mono", color: "var(--accent)", fontWeight: 700, fontSize: ".85rem", flexShrink: 0 }}>Q{qi + 1}.</span>
+                  <div style={{ fontSize: ".9rem", flex: 1 }}>{q.text}</div>
+                  <span className={`tag ${isSkipped ? "tag-blue" : isCorrect ? "tag-green" : "tag-red"}`}>
+                    {isSkipped ? "Skipped" : isCorrect ? `+${exam.perQMarks}` : exam.negativeMarking ? `−${exam.negativePenalty}` : "Wrong"}
+                  </span>
+                </div>
+                {q.options.map((opt, oi) => (
+                  <div key={oi} className={`mcq-option ${oi === q.correct ? "correct" : (oi === selected && !isCorrect) ? "wrong" : ""}`}
+                    style={{ cursor: "default", fontSize: ".85rem", padding: "8px 12px" }}>
+                    <div className="mcq-letter">{String.fromCharCode(65 + oi)}</div>
+                    {opt}
+                    {oi === q.correct && <span style={{ marginLeft: "auto", color: "var(--accent3)", fontSize: ".75rem" }}>✓ Correct</span>}
+                    {oi === selected && !isCorrect && <span style={{ marginLeft: "auto", color: "var(--danger)", fontSize: ".75rem" }}>✗ Your answer</span>}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Actions */}
+        <div className="card" style={{ background: "rgba(37,211,102,.05)", border: "1px solid rgba(37,211,102,.2)", textAlign: "center", padding: 28 }}>
+          <div style={{ fontFamily: "Bebas Neue", fontSize: "1.3rem", letterSpacing: 2, marginBottom: 8 }}>📤 SHARE WITH TEACHER</div>
+          <p style={{ color: "var(--muted)", fontSize: ".88rem", marginBottom: 20 }}>
+            Click below to send your marks to <strong style={{ color: "var(--text)" }}>{TEACHER_NAME} Sir</strong> via WhatsApp
+          </p>
+          <button className="btn btn-whatsapp" style={{ fontSize: "1rem", padding: "14px 32px" }} onClick={shareOnWhatsapp}>
+            💬 Send Marks to Sir on WhatsApp
+          </button>
+          <div style={{ fontSize: ".72rem", color: "var(--muted)", marginTop: 8 }}>This will open WhatsApp with your result pre-filled</div>
+        </div>
+
+        <div style={{ marginTop: 16, textAlign: "center" }}>
+          <button className="btn btn-secondary" onClick={onBack}>← Back to Tests</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Resources ───────────────────────────────────────────────────────────────
+function Resources({ role }) {
+  const [resources, setResources] = useState(RESOURCES);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ title: "", class: "Class 12", type: "PDF", link: "#" });
+
+  return (
+    <div className="page">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div className="section-header" style={{ margin: 0 }}>
+          <div className="section-title">STUDY RESOURCES</div>
+          <div className="section-sub">Notes, formulas, and past papers uploaded by {TEACHER_NAME} Sir</div>
+        </div>
+        {role === "teacher" && <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Upload</button>}
+      </div>
+
+      <div className="grid3">
+        {resources.map(r => (
+          <div key={r.id} className="card">
+            <div style={{ fontSize: "2rem", marginBottom: 8 }}>{r.type === "PDF" ? "📄" : "🖼"}</div>
+            <div style={{ fontWeight: 600, fontSize: ".95rem", marginBottom: 6 }}>{r.title}</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <span className="tag tag-blue">{r.class}</span>
+              <span className="tag tag-yellow">{r.type}</span>
+            </div>
+            <div style={{ fontSize: ".75rem", color: "var(--muted)", marginBottom: 12 }}>📅 {r.date}</div>
+            <button className="btn btn-secondary btn-sm" style={{ width: "100%" }}>Download</button>
+          </div>
+        ))}
+      </div>
+
+      {adding && (
+        <div className="modal-overlay" onClick={() => setAdding(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">UPLOAD RESOURCE</div>
+            <div className="form-group">
+              <label className="form-label">Title</label>
+              <input className="form-input" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Class</label>
+                <select className="form-select" value={form.class} onChange={e => setForm(p => ({ ...p, class: e.target.value }))}>
+                  {["Class 9", "Class 10", "Class 11", "Class 12", "JEE", "NEET"].map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Type</label>
+                <select className="form-select" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
+                  <option>PDF</option><option>Image</option><option>Video</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-primary" onClick={() => {
+                setResources(p => [{ ...form, id: randomId(), date: "Today" }, ...p]);
+                setAdding(false); setForm({ title: "", class: "Class 12", type: "PDF", link: "#" });
+              }}>Upload</button>
+              <button className="btn btn-secondary" onClick={() => setAdding(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Schedule ─────────────────────────────────────────────────────────────────
+function Schedule({ role }) {
+  return (
+    <div className="page">
+      <div className="section-header">
+        <div className="section-title">CLASS SCHEDULE</div>
+        <div className="section-sub">Weekly timetable for all batches</div>
+      </div>
+      <div className="card">
+        <table className="schedule-table">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Time</th>
+              <th>Topic / Batch</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SCHEDULE.map(s => (
+              <tr key={s.day}>
+                <td><span className="tag tag-yellow">{s.day}</span></td>
+                <td style={{ fontFamily: "JetBrains Mono", fontSize: ".82rem", color: "var(--accent2)" }}>{s.time}</td>
+                <td>{s.topic}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="alert alert-warn" style={{ marginTop: 16 }}>
+        📞 For any schedule change, contact {TEACHER_NAME} Sir at <a href={`https://wa.me/${TEACHER_WHATSAPP}`} style={{ color: "var(--accent)" }} target="_blank">+91 99335 66106</a>
+      </div>
+    </div>
+  );
+}
+
+// ─── Announcements ────────────────────────────────────────────────────────────
+function Announcements({ role }) {
+  const [announcements, setAnnouncements] = useState(ANNOUNCEMENTS);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+
+  return (
+    <div className="page">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div className="section-header" style={{ margin: 0 }}>
+          <div className="section-title">ANNOUNCEMENTS</div>
+          <div className="section-sub">Important updates from {TEACHER_NAME} Sir</div>
+        </div>
+        {role === "teacher" && <button className="btn btn-primary" onClick={() => setAdding(true)}>+ Post</button>}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {announcements.map(a => (
+          <div key={a.id} className="card" style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+            <div style={{ fontSize: "1.5rem", flexShrink: 0 }}>📢</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: ".95rem", marginBottom: 6 }}>{a.text}</div>
+              <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>{a.date}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {adding && (
+        <div className="modal-overlay" onClick={() => setAdding(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-title">POST ANNOUNCEMENT</div>
+            <div className="form-group">
+              <label className="form-label">Message</label>
+              <textarea className="form-textarea" rows={4} value={text} onChange={e => setText(e.target.value)} placeholder="Type your announcement…" />
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="btn btn-primary" onClick={() => {
+                setAnnouncements(p => [{ id: randomId(), text, date: new Date().toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) }, ...p]);
+                setAdding(false); setText("");
+              }}>Post</button>
+              <button className="btn btn-secondary" onClick={() => setAdding(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Leaderboard ─────────────────────────────────────────────────────────────
+const SAMPLE_LB = [
+  { name: "Rahul Sharma", class: "Class 12", score: 95, tests: 8 },
+  { name: "Priya Singh", class: "Class 12", score: 91, tests: 7 },
+  { name: "Amit Kumar", class: "Class 11", score: 88, tests: 9 },
+  { name: "Sneha Das", class: "Class 12", score: 85, tests: 6 },
+  { name: "Rohan Gupta", class: "Class 11", score: 80, tests: 8 },
+];
+
+function Leaderboard() {
+  const medals = ["🥇", "🥈", "🥉"];
+  const rankClass = ["gold", "silver", "bronze"];
+  return (
+    <div className="page">
+      <div className="section-header">
+        <div className="section-title">LEADERBOARD</div>
+        <div className="section-sub">Top performers across all tests</div>
+      </div>
+      <div style={{ maxWidth: 600 }}>
+        {SAMPLE_LB.map((s, i) => (
+          <div key={s.name} className="lb-row">
+            <div className={`lb-rank ${rankClass[i] || ""}`}>{medals[i] || i + 1}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{s.name}</div>
+              <div style={{ fontSize: ".75rem", color: "var(--muted)" }}>{s.class} · {s.tests} tests</div>
+            </div>
+            <div style={{ fontFamily: "Bebas Neue", fontSize: "1.4rem", color: "var(--accent)", letterSpacing: 1 }}>{s.score}%</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Student Registration ─────────────────────────────────────────────────────
+function StudentRegister({ onRegister }) {
+  const [name, setName] = useState("");
+  const [cls, setCls] = useState("Class 12");
+  return (
+    <div className="page">
+      <div className="register-card card">
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>🎓</div>
+          <div style={{ fontFamily: "Bebas Neue", fontSize: "1.8rem", letterSpacing: 2 }}>STUDENT LOGIN</div>
+          <div style={{ color: "var(--muted)", fontSize: ".85rem", marginTop: 4 }}>Enter your details to access tests</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Your Name</label>
+          <input className="form-input" placeholder="e.g. Rahul Sharma" value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Your Class</label>
+          <select className="form-select" value={cls} onChange={e => setCls(e.target.value)}>
+            {["Class 9", "Class 10", "Class 11", "Class 12", "JEE Dropper", "NEET"].map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <button className="btn btn-primary" style={{ width: "100%" }} disabled={!name.trim()} onClick={() => onRegister({ name: name.trim(), class: cls })}>
+          Enter Portal →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Teacher PIN ──────────────────────────────────────────────────────────────
+function TeacherLogin({ onLogin, onBack }) {
+  const [pin, setPin] = useState("");
+  const [err, setErr] = useState(false);
+  return (
+    <div className="page">
+      <div className="register-card card">
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>🔐</div>
+          <div style={{ fontFamily: "Bebas Neue", fontSize: "1.8rem", letterSpacing: 2 }}>TEACHER LOGIN</div>
+          <div style={{ color: "var(--muted)", fontSize: ".85rem", marginTop: 4 }}>Enter teacher PIN</div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">PIN</label>
+          <input className="form-input" type="password" placeholder="••••" value={pin} onChange={e => { setPin(e.target.value); setErr(false); }} />
+          {err && <div style={{ color: "var(--danger)", fontSize: ".8rem", marginTop: 4 }}>Incorrect PIN. Try: 1234</div>}
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => { if (pin === "1234") onLogin(); else setErr(true); }}>Login</button>
+          <button className="btn btn-secondary" onClick={onBack}>Back</button>
+        </div>
+        <div style={{ fontSize: ".72rem", color: "var(--muted)", textAlign: "center", marginTop: 12 }}>Demo PIN: 1234</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Role Selector ─────────────────────────────────────────────────────────────
+function RoleSelector({ onSelect }) {
+  return (
+    <div className="page">
+      <div style={{ maxWidth: 480, margin: "60px auto", textAlign: "center" }}>
+        <div style={{ fontFamily: "Bebas Neue", fontSize: "1.5rem", letterSpacing: 2, color: "var(--muted)", marginBottom: 24 }}>WHO ARE YOU?</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="card" style={{ cursor: "pointer", padding: 32, textAlign: "center" }} onClick={() => onSelect("student")}>
+            <div style={{ fontSize: "3rem", marginBottom: 12 }}>🎓</div>
+            <div style={{ fontFamily: "Bebas Neue", fontSize: "1.4rem", letterSpacing: 2 }}>I'm a Student</div>
+            <div style={{ fontSize: ".8rem", color: "var(--muted)", marginTop: 6 }}>Take tests, view results</div>
+          </div>
+          <div className="card" style={{ cursor: "pointer", padding: 32, textAlign: "center" }} onClick={() => onSelect("teacher")}>
+            <div style={{ fontSize: "3rem", marginBottom: 12 }}>👨‍🏫</div>
+            <div style={{ fontFamily: "Bebas Neue", fontSize: "1.4rem", letterSpacing: 2 }}>I'm the Teacher</div>
+            <div style={{ fontSize: ".8rem", color: "var(--muted)", marginTop: 6 }}>Create tests, manage content</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Root ─────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [role, setRole] = useState(null); // null | "student" | "teacher" | "teacher-login"
+  const [student, setStudent] = useState(null);
+  const [tab, setTab] = useState("home");
+  const [exams, setExams] = useState(SEED_EXAMS);
+  const [activeExam, setActiveExam] = useState(null);
+  const [result, setResult] = useState(null);
+
+  const handleComplete = (res) => { setResult(res); setActiveExam(null); };
+
+  return (
+    <>
+      <style>{CSS}</style>
+      {role && role !== "teacher-login" && (
+        <Nav tab={tab} setTab={(t) => { setActiveExam(null); setResult(null); setTab(t); }} role={role} />
+      )}
+
+      {/* Role selection */}
+      {!role && <><style>{CSS}</style><div><Nav tab="home" setTab={() => {}} role="guest" /><RoleSelector onSelect={r => { if (r === "teacher") setRole("teacher-login"); else setRole("pending-student"); }} /></div></>}
+      {role === "teacher-login" && <><Nav tab="home" setTab={() => {}} role="guest" /><TeacherLogin onLogin={() => setRole("teacher")} onBack={() => setRole(null)} /></>}
+      {role === "pending-student" && <><Nav tab="home" setTab={() => {}} role="guest" /><StudentRegister onRegister={s => { setStudent(s); setRole("student"); }} /></>}
+
+      {/* Teacher views */}
+      {role === "teacher" && (
+        <>
+          {tab === "home" && <><Hero setTab={setTab} role="teacher" /><div className="page"><div className="alert alert-success">👋 Welcome back, {TEACHER_NAME} Sir! You have {exams.filter(e=>e.status==="active").length} active test(s).</div></div></>}
+          {tab === "create-exam" && <CreateExam exams={exams} setExams={setExams} />}
+          {tab === "resources" && <Resources role="teacher" />}
+          {tab === "schedule" && <Schedule role="teacher" />}
+          {tab === "announcements" && <Announcements role="teacher" />}
+          {tab === "leaderboard" && <Leaderboard />}
+        </>
+      )}
+
+      {/* Student views */}
+      {role === "student" && (
+        <>
+          {!activeExam && !result && tab === "home" && <><Hero setTab={setTab} role="student" /></>}
+          {!activeExam && !result && tab === "exams" && <ExamBoard exams={exams} student={student} onStartExam={e => setActiveExam(e)} />}
+          {!activeExam && !result && tab === "resources" && <Resources role="student" />}
+          {!activeExam && !result && tab === "schedule" && <Schedule role="student" />}
+          {!activeExam && !result && tab === "announcements" && <Announcements role="student" />}
+          {!activeExam && !result && tab === "leaderboard" && <Leaderboard />}
+          {activeExam && <TakeExam exam={activeExam} student={student} onComplete={handleComplete} />}
+          {result && <Analysis result={result} onBack={() => { setResult(null); setTab("exams"); }} />}
+        </>
+      )}
+    </>
+  );
+}
+to
